@@ -43,15 +43,15 @@
           <i class="ph-bold ph-link text-xl mr-2 text-indigo-500"></i> SFTP Connection
         </h2>
         <form id="connection-form" class="space-y-3">
-          <input type="text" id="host" value="rasp-alex2.local" placeholder="Host (e.g., rasp-alex2.local)"
+          <input type="text" id="host" value="" placeholder="Host (e.g., example.com)"
                  class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
           <div class="flex gap-2">
             <input type="number" id="port" value="22" placeholder="Port"
                    class="w-1/3 p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
-            <input type="text" id="username" value="rasp-alex2" placeholder="Username"
+            <input type="text" id="username" value="" placeholder="Username"
                    class="w-2/3 p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
           </div>
-          <input type="password" id="password" value="120313" placeholder="Password"
+          <input type="password" id="password" value="" placeholder="Password"
                  class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
           <button type="submit" id="connect-btn"
                   class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg shadow-md transition-colors duration-200 flex items-center justify-center disabled:opacity-50">
@@ -97,7 +97,8 @@
 
   <script>
     // API origin — set to your API server
-    const apiBaseUrl = 'http://localhost:5000';
+   // const apiBaseUrl = 'https://crispy-tribble-x57qrv7qr6whv4jr-1867.app.github.dev';
+   const apiBaseUrl = window.location.origin;
 
     // state
     let currentPath = '/';
