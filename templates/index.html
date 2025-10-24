@@ -1,560 +1,469 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Ultra Modern SFTP File Manager</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SFTP Simple Client — Fixed</title>
 
-<!-- Ace Editor from CDN -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ace.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.14/ext-language_tools.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
 
-<style>
-  body { font-family: Arial, Helvetica, sans-serif; margin:0; height:100vh; display:flex; background:#0b1220; color:#e6eef8; }
-  .sidebar { width:360px; background:linear-gradient(180deg,#071028,#0f233a); padding:18px; box-sizing:border-box; overflow:auto; }
-  .main { flex:1; padding:18px; box-sizing:border-box; overflow:auto; display:flex; flex-direction:column; }
-  h1 { margin:0 0 12px 0; font-size:18px; color:#bfe1ff; }
-  .connect { margin-bottom:14px; }
-  input[type=text], input[type=password], input[type=number] { width:100%; padding:8px; margin:6px 0 10px 0; border-radius:6px; border:1px solid #264a64; background:#071b2a; color:#dff0ff; }
-  button { background:#2b9bd1; color:white; padding:8px 10px; border:0; border-radius:6px; cursor:pointer; }
-  button.ghost { background:transparent; border:1px solid #2b9bd1; color:#9fd8ff; }
-  .pathbar { font-size:13px; color:#cfeeff; margin-bottom:8px; display:flex; gap:8px; align-items:center; }
-  .list { background:rgba(255,255,255,0.02); padding:12px; border-radius:8px; max-height:60vh; overflow:auto; }
-  .item { padding:8px; display:flex; justify-content:space-between; align-items:center; border-radius:6px; cursor:pointer; }
-  .item:hover { background:rgba(255,255,255,0.02); }
-  .item .name { display:flex; gap:8px; align-items:center; }
-  .meta { font-size:12px; color:#9fbfd6; }
+  <style>
+    :root { --primary: #4f46e5; --primary-dark: #4338ca; }
+    html, body { height: 100%; }
+    body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
 
-  /* Editor area: we will put Ace editor where the textarea was */
-  .editor { background:rgba(255,255,255,0.02); padding:12px; border-radius:8px; flex:1; display:flex; flex-direction:column; gap:8px; position:relative; }
-  /* Keep original textarea in DOM (hidden) so existing logic that uses it is unchanged */
-  textarea#editor {
-    display:block; width:100%; height:100%; box-sizing:border-box;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Courier New", monospace;
-    font-size:14px; line-height:1.45; padding:8px; border-radius:6px; border:1px solid #264a64;
-    /* We'll hide it visually but keep it for API compatibility */
-    position:relative;
-  }
+    #explorer-content { scrollbar-width: thin; scrollbar-color: var(--primary) #e5e7eb; max-height: 75vh; overflow-y: auto; }
+    #explorer-content::-webkit-scrollbar { width: 8px; }
+    #explorer-content::-webkit-scrollbar-thumb { background-color: var(--primary); border-radius: 4px; }
+    #explorer-content::-webkit-scrollbar-track { background-color: #e5e7eb; border-radius: 4px; }
 
-  /* Ace container should fill same area */
-  #aceEditor {
-    width:100%;
-    height:100%;
-    border-radius:6px;
-    box-sizing:border-box;
-    overflow:hidden;
-  }
+    .file-icon { display:inline-block; width:20px; height:20px; vertical-align:middle; }
+    .folder-icon { /* your CSS */ }
+    .file-icon-regular { /* your CSS */ }
 
-  /* toolbar */
-  #hlToolbar { display:flex; gap:8px; align-items:center; justify-content:space-between; width:100%; margin-top:6px; }
-  #hlToolbar .left { display:flex; gap:8px; align-items:center; }
-  select.small { background:#071b2a; color:#dff0ff; border:1px solid #264a64; border-radius:6px; padding:6px 8px; }
-  .small { font-size:13px; padding:6px 8px; }
-  .muted { color:#9fbfd6; font-size:13px; }
-</style>
+    #editor-container { display:flex; flex-direction:column; min-height:0; }
+    #editor { flex:1 1 auto; min-height:0; height:auto; }
+
+    .icon-fallback { display:none; margin-right:0.5rem; }
+  </style>
 </head>
-<body>
+<body class="min-h-screen flex flex-col">
 
-<div class="sidebar">
-  <h1>Ultra Modern SFTP Manager</h1>
+  <div id="status-toast" class="fixed top-4 right-4 z-50 p-4 rounded-lg shadow-xl text-white transition-opacity duration-300 opacity-0 pointer-events-none" role="alert"></div>
 
-  <div id="connectBox" class="connect">
-    <input id="host" type="text" placeholder="SFTP Host (e.g. 1.2.3.4)" />
-    <input id="port" type="number" value="22" placeholder="Port (22)" />
-    <input id="username" type="text" placeholder="Username" />
-    <input id="password" type="password" placeholder="Password" />
-    <div style="display:flex; gap:8px;">
-      <button onclick="connect()" class="small">Connect</button>
-      <button onclick="disconnect()" class="small ghost">Disconnect</button>
-    </div>
-    <div id="connectStatus" class="muted" style="margin-top:8px;">Not connected</div>
-  </div>
+  <main class="flex flex-1 flex-col md:flex-row p-4 gap-4 min-h-screen">
 
-  <div style="margin-top:12px;">
-    <div class="pathbar">
-      <button onclick="goUp()" title="Up" class="small ghost">⬆ Up</button>
-      <div id="cwd" style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
-    </div>
+    <div class="flex flex-col gap-4 md:w-1/3 lg:w-1/4">
 
-    <div style="display:flex; gap:8px; margin-bottom:8px;">
-      <button onclick="refreshListing()" class="small">Refresh</button>
-      <button onclick="promptNewFile()" class="small ghost">New File</button>
-      <button onclick="promptNewFolder()" class="small ghost">New Folder</button>
-      <label class="small ghost" style="cursor:pointer;">
-        Upload
-        <input id="fileUpload" type="file" class="upload-input" onchange="doUpload()" />
-      </label>
-    </div>
-
-    <div id="fileList" class="list"></div>
-  </div>
-</div>
-
-<div class="main">
-  <div style="display:flex; justify-content:space-between; align-items:center;">
-    <div>
-      <div id="selectedPath" class="muted">Select a file to view/edit</div>
-      <div id="selectedInfo" class="muted" style="font-size:12px;"></div>
-    </div>
-    <div class="row">
-      <button onclick="downloadSelected()" class="small">Download</button>
-      <button onclick="renameSelected()" class="small ghost">Rename</button>
-      <button onclick="removeSelected()" class="small ghost">Delete</button>
-    </div>
-  </div>
-
-  <div class="editor" style="margin-top:12px;">
-    <!-- Ace will be placed here -->
-    <div id="aceEditor" aria-label="Code editor"></div>
-
-    <!-- Keep the textarea for API compatibility. It's hidden from view but still present.
-         Your existing functions use document.getElementById('editor').value and will continue to work. -->
-    <textarea id="editor" placeholder="File contents will appear here..." spellcheck="false"
-              style="display:none;"></textarea>
-
-    <!-- toolbar: choose language (Auto by default) -->
-    <div id="hlToolbar">
-      <div class="left">
-        <label class="muted small" style="align-self:center; margin-right:6px;">Lang:</label>
-        <select id="hlLang" class="small" title="Choose language or Auto">
-          <option value="auto">Auto</option>
-          <option value="html">HTML</option>
-          <option value="xml">XML</option>
-          <option value="css">CSS</option>
-          <option value="javascript">JavaScript</option>
-          <option value="typescript">TypeScript</option>
-          <option value="json">JSON</option>
-          <option value="python">Python</option>
-          <option value="java">Java</option>
-          <option value="c">C</option>
-          <option value="cpp">C++</option>
-          <option value="csharp">C#</option>
-          <option value="php">PHP</option>
-          <option value="go">Go</option>
-          <option value="rust">Rust</option>
-          <option value="kotlin">Kotlin</option>
-          <option value="ruby">Ruby</option>
-          <option value="swift">Swift</option>
-          <option value="sql">SQL</option>
-          <option value="bash">Bash</option>
-          <option value="sh">Shell</option>
-          <option value="yaml">YAML</option>
-          <option value="markdown">Markdown</option>
-        </select>
+      <div id="connection-panel" class="bg-white p-4 rounded-xl shadow-lg transition-all duration-300">
+        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+          <i class="ph-bold ph-link text-xl mr-2 text-indigo-500"></i> SFTP Connection
+        </h2>
+        <form id="connection-form" class="space-y-3">
+          <input type="text" id="host" value="rasp-alex2.local" placeholder="Host (e.g., rasp-alex2.local)"
+                 class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+          <div class="flex gap-2">
+            <input type="number" id="port" value="22" placeholder="Port"
+                   class="w-1/3 p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+            <input type="text" id="username" value="rasp-alex2" placeholder="Username"
+                   class="w-2/3 p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+          </div>
+          <input type="password" id="password" value="120313" placeholder="Password"
+                 class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+          <button type="submit" id="connect-btn"
+                  class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg shadow-md transition-colors duration-200 flex items-center justify-center disabled:opacity-50">
+            <i class="ph-fill ph-plug-connected text-lg mr-2"></i> Connect
+          </button>
+        </form>
       </div>
-      <div class="muted small">Live highlighting — typing updates instantly (Ace)</div>
+
+      <div id="explorer-panel" class="bg-white p-4 rounded-xl shadow-lg flex flex-col flex-1 min-h-[300px] transition-all duration-300 hidden">
+        <h2 class="text-xl font-bold text-gray-800 flex items-center mb-2">
+          <i class="ph-bold ph-folder-open text-xl mr-2 text-indigo-500"></i> File Explorer
+        </h2>
+
+        <div id="current-path" class="text-xs text-gray-500 truncate mb-3 bg-gray-100 p-2 rounded-lg font-mono cursor-pointer hover:bg-gray-200 active:bg-gray-300 transition-colors duration-150" title="Click to go up one level">/</div>
+
+        <div id="explorer-content" class="flex-1 space-y-1">
+          <div class="text-center text-gray-500 pt-12">Select a directory to view content.</div>
+        </div>
+      </div>
+
     </div>
 
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
-      <div class="muted">Editing mode — changes overwrite remote file when saved</div>
-      <div style="display:flex; gap:8px;">
-        <button onclick="saveFile()" class="small">Save</button>
-        <button onclick="discardChanges()" class="small ghost">Discard</button>
+    <div id="editor-container" class="flex flex-col gap-4 md:w-2/3 lg:w-3/4 bg-white p-4 rounded-xl shadow-lg transition-all duration-300 hidden">
+      <h2 class="text-xl font-bold text-gray-800 flex items-center">
+        <i class="ph-bold ph-file-text text-xl mr-2 text-indigo-500"></i> <span id="editor-filename">No File Selected</span>
+      </h2>
+
+      <div id="editor" style="width:100%"></div>
+
+      <div class="flex justify-end gap-3">
+        <button id="save-btn" onclick="saveFile()"
+                class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-colors duration-200 flex items-center disabled:opacity-50"
+                disabled>
+          <i class="ph-fill ph-floppy-disk text-lg mr-2"></i> Save Changes
+        </button>
+        <button id="close-editor-btn" type="button"
+                class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-colors duration-200 flex items-center">
+          <i class="ph-fill ph-x-circle text-lg mr-2"></i> Close
+        </button>
       </div>
     </div>
-  </div>
-</div>
+  </main>
 
-<script>
-/* ------------------------------
-   Your original logic (unchanged)
-   ------------------------------ */
-let currentPath = '/';
-let cwd = '/';
-let selected = null; // {path, is_dir}
-let connected = false;
+  <script>
+    // API origin — set to your API server
+    const apiBaseUrl = 'http://localhost:5000';
 
-function setStatus(text) {
-  document.getElementById('connectStatus').textContent = text;
-}
+    // state
+    let currentPath = '/';
+    let cwd = '/';
+    let selected = null; // {path,is_dir}
+    let connected = false;
 
-async function connect() {
-  const host = document.getElementById('host').value;
-  const port = document.getElementById('port').value || 22;
-  const username = document.getElementById('username').value;
-  const password = document.getElementById('password').value;
-
-  const res = await fetch('/connect', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({host, port, username, password})
-  });
-  const j = await res.json();
-  if (j.success) {
-    connected = true;
-    setStatus('Connected to ' + host);
-    cwd = '/';
-    currentPath = '/';
-    refreshListing();
-  } else {
-    alert('Connect error: ' + (j.message || 'unknown'));
-    setStatus('Not connected');
-  }
-}
-
-async function disconnect() {
-  await fetch('/disconnect', {method:'POST'});
-  connected = false;
-  setStatus('Not connected');
-  document.getElementById('fileList').innerHTML = '';
-  document.getElementById('cwd').textContent = '';
-  document.getElementById('selectedPath').textContent = 'Select a file to view/edit';
-  document.getElementById('editor').value = '';
-}
-
-function pathJoin(a, b) {
-  if (!a) a = '/';
-  if (b.startsWith('/')) return b;
-  if (a.endsWith('/')) return a + b;
-  return a + '/' + b;
-}
-
-async function refreshListing(path) {
-  if (!connected) { alert('Not connected'); return; }
-  const target = path || cwd || '/';
-  const res = await fetch('/api/list?path=' + encodeURIComponent(target));
-  const j = await res.json();
-  if (!j.success) { alert('Error listing: ' + j.message); return; }
-  cwd = target;
-  document.getElementById('cwd').textContent = cwd;
-  renderList(j.items);
-}
-
-function renderList(items) {
-  const container = document.getElementById('fileList');
-  container.innerHTML = '';
-  // Parent (..)
-  if (cwd !== '/') {
-    const up = document.createElement('div');
-    up.className = 'item';
-    up.innerHTML = '<div class="name">⬆ ..</div><div class="meta">Parent</div>';
-    up.onclick = () => {
-      const parts = cwd.split('/').filter(Boolean);
-      parts.pop();
-      const np = '/' + parts.join('/');
-      refreshListing(np === '/' ? '/' : np);
-    };
-    container.appendChild(up);
-  }
-  items.forEach(it => {
-    const el = document.createElement('div');
-    el.className = 'item';
-    const icon = it.is_dir ? '📁' : '📄';
-    const name = document.createElement('div');
-    name.className = 'name';
-    name.innerHTML = `<span style="width:20px;display:inline-block">${icon}</span><span>${it.name}</span>`;
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = it.is_dir ? 'Folder' : `${it.size} bytes`;
-    el.appendChild(name);
-    el.appendChild(meta);
-
-    el.onclick = () => {
-      if (it.is_dir) {
-        refreshListing(it.path);
-      } else {
-        openFile(it.path);
-      }
-    };
-
-    el.oncontextmenu = (e) => {
-      e.preventDefault();
-      // set selection for context operations
-      selected = it;
-      updateSelectionUI();
-      // simple browser confirm actions for now
-      const action = prompt('Actions: rename / delete / download (type one)', '');
-      if (!action) return;
-      if (action === 'rename') renameSelected();
-      if (action === 'delete') removeSelected();
-      if (action === 'download') downloadSelected();
-    };
-
-    container.appendChild(el);
-  });
-}
-
-async function openFile(path) {
-  const res = await fetch('/api/read?path=' + encodeURIComponent(path));
-  const j = await res.json();
-  if (!j.success) { alert('Read error: ' + j.message); return; }
-  selected = {path: path, is_dir:false};
-  updateSelectionUI();
-  document.getElementById('editor').value = j.content;
-  // IMPORTANT: we will ensure the editor proxy updates Ace (see below)
-}
-
-function updateSelectionUI() {
-  if (!selected) {
-    document.getElementById('selectedPath').textContent = 'Select a file to view/edit';
-    document.getElementById('selectedInfo').textContent = '';
-    return;
-  }
-  document.getElementById('selectedPath').textContent = selected.path;
-  document.getElementById('selectedInfo').textContent = selected.is_dir ? 'Directory' : 'File';
-}
-
-async function saveFile() {
-  if (!selected || selected.is_dir) { alert('Select a file to save'); return; }
-  const content = document.getElementById('editor').value;
-  const res = await fetch('/api/write', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({path: selected.path, content})
-  });
-  const j = await res.json();
-  if (j.success) {
-    alert('Saved');
-    refreshListing(cwd);
-  } else {
-    alert('Save error: ' + j.message);
-  }
-}
-
-function discardChanges() {
-  if (!selected) return;
-  openFile(selected.path);
-}
-
-async function promptNewFile() {
-  const name = prompt('New file name (relative to current directory):');
-  if (!name) return;
-  const remote = pathJoin(cwd, name);
-  // create empty file
-  const res = await fetch('/api/write', {
-    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path: remote, content: ''})
-  });
-  const j = await res.json();
-  if (j.success) refreshListing(cwd);
-  else alert('Error: ' + j.message);
-}
-
-async function promptNewFolder() {
-  const name = prompt('New folder name (relative to current directory):');
-  if (!name) return;
-  const remote = pathJoin(cwd, name);
-  const res = await fetch('/api/mkdir', {
-    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path: remote})
-  });
-  const j = await res.json();
-  if (j.success) refreshListing(cwd);
-  else alert('Error: ' + j.message);
-}
-
-async function removeSelected() {
-  if (!selected) { alert('Select file/folder first'); return; }
-  if (!confirm('Delete ' + selected.path + ' ?')) return;
-  const res = await fetch('/api/remove', {
-    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path: selected.path})
-  });
-  const j = await res.json();
-  if (j.success) {
-    selected = null;
-    updateSelectionUI();
-    refreshListing(cwd);
-  } else alert('Error: ' + j.message);
-}
-
-async function renameSelected() {
-  if (!selected) { alert('Select file/folder first'); return; }
-  const newName = prompt('New name or full path:', selected.path);
-  if (!newName) return;
-  const res = await fetch('/api/rename', {
-    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({old: selected.path, new: newName})
-  });
-  const j = await res.json();
-  if (j.success) {
-    selected = null;
-    refreshListing(cwd);
-  } else alert('Error: ' + j.message);
-}
-
-async function downloadSelected() {
-  if (!selected || selected.is_dir) { alert('Select a file to download'); return; }
-  const url = '/api/download?path=' + encodeURIComponent(selected.path);
-  // trigger download
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = '';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
-
-function goUp() {
-  if (!cwd || cwd === '/') return refreshListing('/');
-  const parts = cwd.split('/').filter(Boolean);
-  parts.pop();
-  const np = '/' + parts.join('/');
-  refreshListing(np === '/' ? '/' : np);
-}
-
-async function doUpload() {
-  const input = document.getElementById('fileUpload');
-  if (!input.files || input.files.length === 0) return;
-  const file = input.files[0];
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('remote_dir', cwd);
-  const res = await fetch('/api/upload', { method:'POST', body: fd });
-  const j = await res.json();
-  if (j.success) {
-    alert('Uploaded');
-    refreshListing(cwd);
-    input.value = '';
-  } else {
-    alert('Upload error: ' + j.message);
-  }
-}
-
-/* ------------------------------
-   Ace integration (non-invasive)
-   ------------------------------ */
-(function(){
-  // Create Ace editor in #aceEditor and proxy the hidden textarea 'editor' value to it.
-  const aceContainer = document.getElementById('aceEditor');
-  const ta = document.getElementById('editor');
-  const langSel = document.getElementById('hlLang');
-
-  // Initialize Ace
-  const editor = ace.edit(aceContainer, {
-    mode: 'ace/mode/text',
-    theme: 'ace/theme/monokai',
-    value: '',
-    showPrintMargin: false,
-    wrap: true,
-    useWorker: false,
-    enableBasicAutocompletion: true,
-    enableLiveAutocompletion: false,
-    fontSize: "13px"
-  });
-
-  // Map for language selector -> ACE mode name
-  const modeMap = {
-    'html':'ace/mode/html','xml':'ace/mode/xml','css':'ace/mode/css','javascript':'ace/mode/javascript',
-    'typescript':'ace/mode/typescript','json':'ace/mode/json','python':'ace/mode/python','java':'ace/mode/java',
-    'c':'ace/mode/c_cpp','cpp':'ace/mode/c_cpp','csharp':'ace/mode/csharp','php':'ace/mode/php',
-    'go':'ace/mode/golang','rust':'ace/mode/rust','kotlin':'ace/mode/kotlin','ruby':'ace/mode/ruby',
-    'swift':'ace/mode/swift','sql':'ace/mode/sql','bash':'ace/mode/sh','sh':'ace/mode/sh','yaml':'ace/mode/yaml',
-    'markdown':'ace/mode/markdown','text':'ace/mode/text'
-  };
-
-  function setModeFromSelector(){
-    const v = (langSel && langSel.value) ? langSel.value : 'auto';
-    if (v === 'auto') return editor.session.setMode('ace/mode/text');
-    const m = modeMap[v] || 'ace/mode/text';
-    editor.session.setMode(m);
-  }
-
-  // Initial mode
-  setModeFromSelector();
-  langSel.addEventListener('change', setModeFromSelector);
-
-  // When user types in Ace, keep hidden textarea.value in sync (so existing code that reads .value works)
-  editor.session.on('change', function(){
-    // Use set without triggering any events beyond setting property
-    // We will update ta.value via the proxied setter (which we'll define below)
-    if (ta._fromAce) return; // avoid recursion
-    try {
-      ta._fromAce = true;
-      ta.value = editor.getValue();
-    } finally {
-      ta._fromAce = false;
+    function showStatus(message, isError = false) {
+      const toast = document.getElementById('status-toast');
+      if (!toast) return;
+      toast.textContent = message;
+      toast.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-xl text-white transition-opacity duration-300 opacity-100 pointer-events-auto ${isError ? 'bg-red-600' : 'bg-green-600'}`;
+      setTimeout(() => {
+        toast.classList.remove('opacity-100');
+        toast.classList.add('opacity-0', 'pointer-events-none');
+      }, 2500);
     }
-  });
 
-  // When code sets textarea.value directly (your openFile uses this), update Ace
-  // We'll proxy the value property of the textarea to the editor.
-  // Keep original descriptor to fall back
-  try {
-    const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value') ||
-                       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    async function connect() {
+      const host = document.getElementById('host').value;
+      const port = document.getElementById('port').value || 22;
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
 
-    Object.defineProperty(ta, 'value', {
-      configurable: true,
-      enumerable: true,
-      get: function(){
-        return editor.getValue();
-      },
-      set: function(v){
-        // set ace content; preserve scroll/caret
-        const pos = editor.getCursorPosition();
-        editor.setValue(v === undefined || v === null ? '' : String(v), -1); // -1 keeps cursor at start, so we'll set back
-        // attempt to restore cursor
-        try { editor.moveCursorToPosition(pos); editor.clearSelection(); } catch(e){}
+      try {
+        const res = await fetch(apiBaseUrl + '/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ host, port, username, password })
+        });
+        const j = await res.json();
+        if (j.success) {
+          connected = true;
+          showStatus('Connected to ' + host);
+          cwd = '/';
+          currentPath = '/';
+          refreshListing();
+          const explorerPanel = document.getElementById('explorer-panel');
+          if (explorerPanel) explorerPanel.classList.remove('hidden');
+        } else {
+          alert('Connect error: ' + (j.message || 'unknown'));
+          showStatus('Not connected', true);
+        }
+      } catch (err) {
+        showStatus('Connection failed: ' + err.message, true);
+      }
+    }
+
+    async function disconnect() {
+      try { await fetch(apiBaseUrl + '/disconnect', { method: 'POST' }); } catch (_) {}
+      connected = false;
+      showStatus('Not connected', true);
+      document.getElementById('explorer-content').innerHTML = '';
+      document.getElementById('current-path').textContent = '';
+      document.getElementById('editor-filename').textContent = 'Select a file to view/edit';
+      if (window.ace) try { ace.edit(document.getElementById('editor')).setValue(''); } catch(e){}
+    }
+
+    function pathJoin(a, b) {
+      if (!a) a = '/';
+      if (b.startsWith('/')) return b;
+      if (a.endsWith('/')) return a + b;
+      return a + '/' + b;
+    }
+
+    async function refreshListing(path) {
+      if (!connected) { alert('Not connected'); return; }
+      const target = path || cwd || '/';
+      try {
+        const res = await fetch(apiBaseUrl + '/api/list?path=' + encodeURIComponent(target));
+        const j = await res.json();
+        if (!j.success) { alert('Error listing: ' + j.message); return; }
+        cwd = target;
+        const cwdEl = document.getElementById('current-path');
+        if (cwdEl) cwdEl.textContent = cwd;
+        renderList(j.items || []);
+      } catch (err) {
+        showStatus('Error listing: ' + err.message, true);
+        document.getElementById('explorer-content').innerHTML = `<div class="p-4 text-center text-red-600">Error loading path: ${err.message}</div>`;
+      }
+    }
+
+    function renderList(items) {
+      const container = document.getElementById('explorer-content');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (cwd !== '/') {
+        const up = document.createElement('div');
+        up.className = 'item p-2 rounded-lg cursor-pointer hover:bg-gray-100';
+        up.innerHTML = '<div class="name">⬆ ..</div><div class="meta">Parent</div>';
+        up.onclick = () => {
+          const parts = cwd.split('/').filter(Boolean);
+          parts.pop();
+          const np = '/' + parts.join('/');
+          refreshListing(np === '/' ? '/' : np);
+        };
+        container.appendChild(up);
+      }
+
+      if (!items || items.length === 0) {
+        container.innerHTML = '<div class="text-center text-gray-500 pt-12">Directory is empty.</div>';
+        return;
+      }
+
+      items.forEach(it => container.appendChild(createListItem(it.name, it.path, it.is_dir, it.size)));
+    }
+
+    function createListItem(name, path, isDir, size) {
+      const div = document.createElement('div');
+      div.className = 'flex items-center p-2 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors duration-150 group justify-between';
+      div.title = path;
+
+      const left = document.createElement('div');
+      left.className = 'flex items-center gap-2 flex-1 truncate';
+
+      const iconWrapper = document.createElement('span');
+      iconWrapper.className = 'flex items-center gap-2 truncate';
+
+      const fileIcon = document.createElement('span');
+      fileIcon.className = isDir ? 'file-icon folder-icon' : 'file-icon file-icon-regular';
+      fileIcon.setAttribute('aria-hidden', 'true');
+
+      const phIcon = document.createElement('i');
+      phIcon.className = isDir ? 'ph-fill ph-folder icon-fallback text-yellow-500' : 'ph-fill ph-file-text icon-fallback text-gray-500';
+      phIcon.setAttribute('aria-hidden', 'true');
+      phIcon.style.display = 'none';
+
+      const nameText = document.createElement('span');
+      nameText.className = 'truncate text-sm';
+      nameText.textContent = name;
+
+      iconWrapper.appendChild(fileIcon);
+      iconWrapper.appendChild(phIcon);
+      left.appendChild(iconWrapper);
+      left.appendChild(nameText);
+
+      const meta = document.createElement('div');
+      meta.className = 'text-xs text-gray-500 ml-3';
+      meta.textContent = isDir ? 'Folder' : `${size ?? '-'} bytes`;
+
+      div.appendChild(left);
+      div.appendChild(meta);
+
+      div.onclick = () => { if (isDir) refreshListing(path); else readFile(path); };
+
+      div.oncontextmenu = (e) => {
+        e.preventDefault();
+        selected = { path, is_dir: isDir };
+        updateSelectionUI();
+        const action = prompt('Actions: rename / delete / download (type one)', '');
+        if (!action) return;
+        if (action === 'rename') renameSelected();
+        if (action === 'delete') removeSelected();
+        if (action === 'download') downloadSelected();
+      };
+
+      // check if custom icon is visible; otherwise show fallback
+      setTimeout(() => {
+        try {
+          const cs = window.getComputedStyle(fileIcon);
+          const hasBg = (cs && cs.backgroundImage && cs.backgroundImage !== 'none') || (parseFloat(cs.width) > 0 && parseFloat(cs.height) > 0 && (fileIcon.innerHTML || '').trim() !== '');
+          if (!hasBg) phIcon.style.display = 'inline-block';
+          else phIcon.style.display = 'none';
+        } catch (err) { phIcon.style.display = 'inline-block'; }
+      }, 30);
+
+      return div;
+    }
+
+    function aceModeFromPath(path) {
+      const ext = (path.split('.').pop() || '').toLowerCase();
+      const map = {
+        'js':'javascript','mjs':'javascript','cjs':'javascript',
+        'ts':'typescript','jsx':'jsx','tsx':'tsx',
+        'py':'python','java':'java','html':'html','htm':'html',
+        'css':'css','json':'json','md':'markdown','markdown':'markdown',
+        'sh':'sh','bash':'sh','yml':'yaml','yaml':'yaml','xml':'xml',
+        'php':'php','sql':'sql','c':'c_cpp','cpp':'c_cpp','cc':'c_cpp','h':'c_cpp','hpp':'c_cpp',
+        'rs':'rust','go':'golang','rb':'ruby','swift':'swift','kt':'kotlin','cs':'csharp',
+        'jsonl':'json','txt':'text'
+      };
+      return map[ext] || 'text';
+    }
+
+    async function readFile(path) {
+      selected = { path, is_dir: false };
+      const editorEl = document.getElementById('editor');
+      const filenameEl = document.getElementById('editor-filename');
+      if (filenameEl) filenameEl.textContent = path;
+
+      if (editorEl && window.ace) {
+        const ed = ace.edit(editorEl);
+        const editorContainer = document.getElementById('editor-container');
+        if (editorContainer) editorContainer.classList.remove('hidden');
+
+        ed.setValue('Loading...', -1);
+        const saveBtn = document.getElementById('save-btn');
+        if (saveBtn) saveBtn.disabled = true;
+
+        try {
+          const res = await fetch(apiBaseUrl + '/api/read?path=' + encodeURIComponent(path));
+          const j = await res.json();
+          if (!j.success) { ed.setValue('ERROR: ' + (j.message || 'unknown'), -1); showStatus('Read error: ' + (j.message || 'unknown'), true); return; }
+          ed.setValue(j.content || '', -1);
+          const mode = aceModeFromPath(path);
+          try { ed.session.setMode('ace/mode/' + mode); } catch(e){}
+          if (saveBtn) saveBtn.disabled = false;
+          setTimeout(() => ed.resize(), 50);
+          showStatus('File loaded: ' + path);
+        } catch (err) {
+          ed.setValue('ERROR: Could not read file.\n' + err.message, -1);
+          if (saveBtn) saveBtn.disabled = true;
+          showStatus('Error reading file: ' + err.message, true);
+        }
+      } else {
+        try {
+          const res = await fetch(apiBaseUrl + '/api/read?path=' + encodeURIComponent(path));
+          const j = await res.json();
+          if (!j.success) { alert('Read error: ' + j.message); return; }
+        } catch (err) { alert('Read error: ' + err.message); }
+      }
+    }
+
+    async function saveFile() {
+      if (!selected || selected.is_dir) { alert('Select a file to save'); return; }
+      const editorEl = document.getElementById('editor');
+      let content = '';
+      if (editorEl && window.ace) content = ace.edit(editorEl).getValue();
+      try {
+        const res = await fetch(apiBaseUrl + '/api/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: selected.path, content })
+        });
+        const j = await res.json();
+        if (j.success) {
+          showStatus('Saved ' + selected.path);
+          refreshListing(cwd);
+        } else alert('Save error: ' + j.message);
+      } catch (err) { showStatus('Save failed: ' + err.message, true); }
+    }
+
+    function discardChanges() { if (!selected) return; readFile(selected.path); }
+
+    async function promptNewFile() {
+      const name = prompt('New file name (relative to current directory):');
+      if (!name) return;
+      const remote = pathJoin(cwd, name);
+      try {
+        const res = await fetch(apiBaseUrl + '/api/write', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: remote, content: '' })
+        });
+        const j = await res.json();
+        if (j.success) refreshListing(cwd); else alert('Error: ' + j.message);
+      } catch (err) { alert('Error: ' + err.message); }
+    }
+
+    async function promptNewFolder() {
+      const name = prompt('New folder name (relative to current directory):');
+      if (!name) return;
+      const remote = pathJoin(cwd, name);
+      try {
+        const res = await fetch(apiBaseUrl + '/api/mkdir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: remote }) });
+        const j = await res.json();
+        if (j.success) refreshListing(cwd); else alert('Error: ' + j.message);
+      } catch (err) { alert('Error: ' + err.message); }
+    }
+
+    async function removeSelected() {
+      if (!selected) { alert('Select file/folder first'); return; }
+      if (!confirm('Delete ' + selected.path + ' ?')) return;
+      try {
+        const res = await fetch(apiBaseUrl + '/api/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: selected.path }) });
+        const j = await res.json();
+        if (j.success) { selected = null; updateSelectionUI(); refreshListing(cwd); } else alert('Error: ' + j.message);
+      } catch (err) { alert('Error: ' + err.message); }
+    }
+
+    async function renameSelected() {
+      if (!selected) { alert('Select file/folder first'); return; }
+      const newName = prompt('New name or full path:', selected.path);
+      if (!newName) return;
+      try {
+        const res = await fetch(apiBaseUrl + '/api/rename', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ old: selected.path, new: newName }) });
+        const j = await res.json();
+        if (j.success) { selected = null; refreshListing(cwd); } else alert('Error: ' + j.message);
+      } catch (err) { alert('Error: ' + err.message); }
+    }
+
+    async function downloadSelected() {
+      if (!selected || selected.is_dir) { alert('Select a file to download'); return; }
+      const url = apiBaseUrl + '/api/download?path=' + encodeURIComponent(selected.path);
+      const a = document.createElement('a'); a.href = url; a.download = ''; document.body.appendChild(a); a.click(); a.remove();
+    }
+
+    async function doUpload() {
+      const input = document.getElementById('fileUpload');
+      if (!input || !input.files || input.files.length === 0) return;
+      const file = input.files[0];
+      const fd = new FormData(); fd.append('file', file); fd.append('remote_dir', cwd);
+      try {
+        const res = await fetch(apiBaseUrl + '/api/upload', { method: 'POST', body: fd });
+        const j = await res.json();
+        if (j.success) { alert('Uploaded'); refreshListing(cwd); input.value = ''; } else alert('Upload error: ' + j.message);
+      } catch (err) { alert('Upload error: ' + err.message); }
+    }
+
+    function updateSelectionUI() {
+      if (!selected) { const sp = document.getElementById('editor-filename'); if (sp) sp.textContent = 'Select a file to view/edit'; return; }
+      const sp = document.getElementById('editor-filename'); if (sp) sp.textContent = selected.path;
+    }
+
+    function goUp() { if (!cwd || cwd === '/') return refreshListing('/'); const parts = cwd.split('/').filter(Boolean); parts.pop(); const np = '/' + parts.join('/'); refreshListing(np === '/' ? '/' : np); }
+
+    // wire UI
+    document.getElementById('connection-form')?.addEventListener('submit', async (e) => { e.preventDefault(); await connect(); });
+    document.getElementById('current-path')?.addEventListener('click', () => { const parts = cwd.split('/').filter(Boolean); parts.pop(); const np = '/' + parts.join('/'); refreshListing(np === '/' ? '/' : np); });
+    document.getElementById('close-editor-btn')?.addEventListener('click', closeEditor);
+
+    // add create file button
+    const explorerPanel = document.querySelector('#explorer-panel');
+    if (explorerPanel) {
+      const createFileBtn = document.createElement('button');
+      createFileBtn.textContent = 'Create New File';
+      createFileBtn.className = 'w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg shadow-md transition-colors duration-200';
+      createFileBtn.addEventListener('click', promptNewFile);
+      explorerPanel.appendChild(createFileBtn);
+    }
+
+    // ace init
+    window.addEventListener('load', () => {
+      const editorEl = document.getElementById('editor');
+      if (editorEl && window.ace) {
+        const ed = ace.edit(editorEl);
+        ed.setTheme('ace/theme/monokai');
+        ed.session.setMode('ace/mode/text');
+        ed.setOptions({ wrap: true, fontSize: 14 });
+        
+        ed.setShowPrintMargin(false);
+
+
+        function resizeAce() { try { ed.resize(); } catch(e) {} }
+        window.addEventListener('resize', resizeAce);
+        setTimeout(resizeAce, 100);
       }
     });
-  } catch (e) {
-    // if proxying fails for any reason, fallback: keep textarea visible (rare)
-    console.warn('Value proxy failed, Ace may not sync perfectly:', e);
-  }
 
-  // Proxy focus so code that calls textarea.focus() focuses Ace
-  ta.focus = function(){
-    try { editor.focus(); } catch (e){ textarea.focus(); }
-  };
-
-  // If you want selectionStart/End support from existing code (rare), provide basic proxy methods:
-  ta.getSelection = function(){ return editor.getSelectionRange(); };
-  ta.setSelection = function(range){ editor.getSelection().setSelectionRange(range); };
-
-  // Helper: detect language by filename extension (does not change any logic)
-  function detectLangByFilename(filename){
-    if (!filename) return null;
-    const ext = filename.split('.').pop().toLowerCase();
-    const map = {
-      'html':'html','htm':'html','css':'css','js':'javascript','ts':'typescript','json':'json',
-      'py':'python','java':'java','c':'c','cpp':'cpp','cs':'csharp','php':'php','go':'go',
-      'rs':'rust','kt':'kotlin','rb':'ruby','swift':'swift','sql':'sql','sh':'bash','yml':'yaml','yaml':'yaml','md':'markdown'
-    };
-    return map[ext] || null;
-  }
-
-  // When your openFile sets textarea.value (it does), we already proxy the setter to set Ace.
-  // But to be safe, also intercept calls to window.openFile (non-invasive) to attempt auto mode selection.
-  if (typeof window.openFile === 'function') {
-    const origOpen = window.openFile;
-    window.openFile = async function(path){
-      const ret = await origOpen(path);
-      try {
-        const detected = detectLangByFilename(path);
-        if (detected && langSel && langSel.value === 'auto'){
-          const mode = modeMap[detected] || 'ace/mode/text';
-          editor.session.setMode(mode);
-        }
-      } catch(e){}
-      return ret;
-    };
-  }
-
-  // Initialize editor content from current textarea value (if any)
-  try {
-    const initial = (ta.value !== undefined && ta.value !== null) ? String(ta.value) : '';
-    editor.setValue(initial, -1);
-  } catch(e){}
-
-  // Make sure Ace resizes with container
-  window.addEventListener('resize', () => { try { editor.resize(); } catch(e){} });
-
-  // Keep focus/blur behavior reasonably transparent
-  editor.on('focus', () => { ta.classList && ta.classList.add('focused'); });
-  editor.on('blur', () => { ta.classList && ta.classList.remove('focused'); });
-
-  // OPTIONAL: set editor options so typing behaves like a normal editor
-  editor.setOptions({
-    enableBasicAutocompletion: true,
-    enableSnippets: true,
-    enableLiveAutocompletion: false,
-    highlightActiveLine: true,
-    showPrintMargin: false,
-    wrap: true
-  });
-
-  // Expose editor for debugging if needed
-  window.__aceEditorInstance = editor;
-
-})();
-</script>
-
+    // close editor function
+    function closeEditor() {
+      const editorContainer = document.getElementById('editor-container');
+      const editorEl = document.getElementById('editor');
+      if (editorContainer) editorContainer.classList.add('hidden');
+      if (editorEl && window.ace) {
+        try {
+          const ed = ace.edit(editorEl);
+          ed.setValue('', -1);
+          ed.session.setMode('ace/mode/text');
+        } catch (e) {}
+      }
+      selected = null;
+      const filenameEl = document.getElementById('editor-filename');
+      if (filenameEl) filenameEl.textContent = 'No File Selected';
+      const saveBtn = document.getElementById('save-btn');
+      if (saveBtn) saveBtn.disabled = true;
+    }
+  </script>
 </body>
 </html>
